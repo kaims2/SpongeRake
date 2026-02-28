@@ -1,11 +1,11 @@
 # HackIllinois2026
 
-A project built at HackIllinois 2026.
+test
 
 ## Getting Started
 
-Instructions coming soon.
+code coming soon
 
 ## Contributors
 
-Contributions are welcome! Feel free to open issues or submit pull requests.
+Kai Shah, Cody Olson, Linus Ringstad, Urim Song Zhus
