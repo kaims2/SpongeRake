@@ -20,4 +20,10 @@ void loop() {
   SoftPWMSet(in3, 0);    // Stop
   SoftPWMSet(in4, 255);  // Full speed
 
+  delay(1000);
+
+
+
+
+
 }
