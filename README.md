@@ -92,4 +92,4 @@ Press `Ctrl+C` to stop.
 
 ## Contributors
 
-Kai Shah, Cody Olson, Linus Ringstad, Urim Song Zhu
+Kai Shah, Cody Olson, Linus Ringstad, Urim Song Zhu :P
