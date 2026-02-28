@@ -12,8 +12,8 @@ void setup() {
 
 void loop() {
   // Set the color to red by turning the red LED on and the others off
-  SoftPWMSet(redPin, 255); // 255 is the maximum brightness
+  SoftPWMSet(redPin, 0); // 255 is the maximum brightness
   SoftPWMSet(greenPin, 0); // 0 is off
-  SoftPWMSet(bluePin, 0);  // 0 is off
+  SoftPWMSet(bluePin, 255);  // 0 is off
   delay(1000); // Wait for 1 second
 }
