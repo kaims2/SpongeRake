@@ -8,4 +8,4 @@ code coming soon
 
 ## Contributors
 
-Kai Shah, Cody Olson, Linus Ringstad, Urim Song Zhus
+Kai Shah, Cody Olson, Linus Ringstad, Urim Song Zhu
