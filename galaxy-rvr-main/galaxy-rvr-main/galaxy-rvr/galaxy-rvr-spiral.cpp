@@ -1,28 +1,6 @@
 /*******************************************************************
   The control program of the Ardunio GalaxyRVR.
-  
-  Please install the SunFounder Controller APP from APP Store(iOS) or Google Play(Android).
-
-  Development test environment:
-    - Arduino IDE 2.0.3
-  Board tools:
-    - Arduino AVR Boards 1.8.3
-  Libraries:
-    - IRLremote
-    - SoftPWM
-    - ArduinoJson
-    - Sunfounder_AI_Camera
-
-  Version: 1.0.0
-    -- https://github.com/sunfounder/galaxy-rvr.git
-  
-  Documentation:
-    -- https://docs.sunfounder.com/projects/galaxy-rvr/en/latest/
-
-  Author: Sunfounder
-  Website: https://www.sunfounder.com
-           https://docs.sunfounder.com
-
+  ...
 ********************************************************************/
 #define VERSION "1.1.0"
 
@@ -50,102 +28,78 @@
   #include <avr/wdt.h>
 #endif
 
-/** Whether to enable TEST mode */
 #define TEST 0
 #if TEST
   #include "test.h"
 #endif
 
-/** Whether to enable print Memory Used */
 #define MEM 0
 #if MEM
-  // https://github.com/mpflaga/Arduino-MemoryFree
   #include <MemoryFree.h>
-  #include <pgmStrToRAM.h> // not needed for new way. but good to have for reference.
+  #include <pgmStrToRAM.h> 
 #endif
 
-
-/** Configure Wifi mode, SSID, password*/
 #define WIFI_MODE WIFI_MODE_AP
 #define SSID "GalaxyRVR"
 #define PASSWORD "12345678"
 
-// #define WIFI_MODE WIFI_MODE_STA
-// #define SSID "xxxxxxxxxx"
-// #define PASSWORD "xxxxxxxxxx"
-
-/** Configure product name */
 #define NAME "GalaxyRVR"
-
-/** Configure product type */
 #define TYPE "GalaxyRVR"
-
-/** Configure websockets port
- * Sunfounder Controller APP fixed using port 8765
-*/
 #define PORT "8765"
 
-
-/** Configure the motors speed in different modes */
 #define OBSTACLE_AVOID_POWER 80
 #define OBSTACLE_FOLLOW_POWER 80
 #define VOICE_CONTROL_POWER 80
-
-/** Configure the follow distance of obstacle follow */
 #define FOLLOW_DISTANCE 20
-
-/** websocket communication headers */
 #define WS_HEADER "WS+"
 
-///@}
+// Define the new mode and its color
+#define MODE_SPIRAL 6 
+#define MODE_SPIRAL_COLOR PURPLE
 
 /*********************** Global variables ****************************/
-/** Instantiate aicamera, a class for serial communication with ESP32-CAM */
 AiCamera aiCam = AiCamera(NAME, TYPE);
-
-/* Config Camera Servo */
 SoftServo servo;
 
 #define SERVO_PIN 6
 #define SERVO_REVERSE false
 
-/* variables of voice control */
 char voice_buf_temp[20];
 int8_t current_voice_code = -1;
-int32_t voice_time = 0; // uint:s
-uint32_t voice_start_time = 0; // uint:s
+int32_t voice_time = 0; 
+uint32_t voice_start_time = 0; 
 
-/* variables of motors and servo*/
 int8_t leftMotorPower = 0;
 int8_t rightMotorPower = 0;
 uint8_t servoAngle = 90;
 
-/* variables of rgb_blink when disconnected */
-uint32_t rgb_blink_interval = 500; // uint: ms
+uint32_t rgb_blink_interval = 500; 
 uint32_t rgb_blink_start_time = 0;
 bool rgb_blink_flag = 0;
-
-/* variable of esp32-cam flash lamp*/
 bool cam_lamp_status = false;
-//@}
+
+// Variables for Spiral Movement Mode (Scaled for 0-100 range)
+int spiralBaseSpeed = 60;  
+int spiralTurnSpeed = 20;   
+int spiralTurnIncrement = 2; 
+int spiralMaxTurnSpeed = 80; 
+int spiralState = 0; // 0: Normal, 1: Backing up, 2: Turning
+unsigned long spiralStateTimer = 0;
+unsigned long lastSpiralIncrementTime = 0;
+
 
 /*********************** setup() & loop() ************************/
-/**
- * setup(), Ardunio main program entrance
- * 
- * Initialization of some peripherals
- */
 void setup() {
   int m = millis();
   Serial.begin(115200);
   Serial.print("GalaxyRVR version "); Serial.println(VERSION);
-
   Serial.println(F("Initialzing..."));
+
 #if defined(ARDUINO_AVR_UNO)
-  SoftPWMBegin(); // init softpwm, before the motors initialization and the rgb LEDs initialization
+  SoftPWMBegin(); 
 #endif
   rgbBegin();
-  rgbWrite(ORANGE); // init hint
+  rgbWrite(ORANGE); 
   carBegin();
   irObstacleBegin();
   batteryBegin();
@@ -157,32 +111,22 @@ void setup() {
   aiCam.setOnReceived(onReceive);
 #endif
 
-  while (millis() - m < 500) {  // Wait for peripherals to be ready
+  while (millis() - m < 500) {  
     delay(1);
   }
 
 #if WATCH_DOG
-  wdt_disable();       /* Disable the watchdog and wait for more than 2 seconds */
-  delay(3000);         /* Done so that the Arduino doesn't keep resetting infinitely in case of wrong configuration */
-  wdt_enable(WDTO_2S); /* Enable the watchdog with a timeout of 2 seconds */
+  wdt_disable();       
+  delay(3000);         
+  wdt_enable(WDTO_2S); 
 #endif
 
   Serial.println(F("Okie!"));
-  rgbWrite(GREEN);  // init finished
+  rgbWrite(GREEN);  
 }
 
-/**
- * loop(), Ardunio main loop
- * 
- * - inclued
- *  - aiCam.loop()
- *  - modeHandler()
- * - or modules test
- */
 void loop() {
 #if !TEST
-  // because the value in a is constantly updated
-  // Note that the cycle interval of the "aiCam.loop()" should be less than 80ms to avoid data d
   aiCam.loop();
   if (aiCam.ws_connected == false) {
     currentMode = MODE_DISCONNECT;
@@ -197,35 +141,20 @@ void loop() {
   }
   modeHandler();
 #else
-  /* Select the item to be tested, multiple selection allowed */
   motors_test();
-  // rgb_test();
-  // ultrasonic_test();
-  // ir_obstacle_test();
-  // obstacleAvoidance();
 #endif
 
 #if WATCH_DOG
-  wdt_reset(); /* Reset the watchdog */
+  wdt_reset(); 
 #endif
 
 #if MEM
-  Serial.print(F("Free RAM = "));  //F function does the same and is now a built in library, in IDE > 1.0.0
-  Serial.println(freeMemory());    // print how much RAM is available in bytes.
+  Serial.print(F("Free RAM = "));  
+  Serial.println(freeMemory());    
 #endif
 }
 
 /***************************** Functions ******************************/
-/**
- * modeHandler(), Execute the corresponding program according to the set mode
- * 
- * - inclued
- *  - MODE_NONE
- *  - MODE_OBSTACLE_FOLLOWING
- *  - MODE_OBSTACLE_AVOIDANCE
- *  - MODE_REMOTE_CONTROL
- *  - MODE_APP_CONTROL
- */
 void modeHandler() {
   switch (currentMode) {
     case MODE_NONE:
@@ -265,21 +194,77 @@ void modeHandler() {
       servo.write(servoAngle);
       voice_control();
       break;
+    case MODE_SPIRAL:
+      rgbWrite(MODE_SPIRAL_COLOR);
+      servo.write(servoAngle);
+      spiralMovement();
+      break;
     default:
       break;
   }
 }
 
-
 /**
- * Obstacle follow program
+ * Spiral movement and obstacle avoidance program (Non-blocking)
  */
+void spiralMovement() {
+  unsigned long currentMillis = millis();
+
+  // 1. Handle ongoing backing up / turning maneuvers without using delay()
+  if (spiralState == 1) { // Backing up
+    if (currentMillis - spiralStateTimer >= 500) {
+      spiralState = 2; // Transition to turn
+      spiralStateTimer = currentMillis;
+    } else {
+      carSetMotors(-spiralBaseSpeed, -spiralBaseSpeed); // Move backward
+    }
+    return;
+  } else if (spiralState == 2) { // Turning Left
+    if (currentMillis - spiralStateTimer >= 500) {
+      spiralState = 0; // Transition back to normal spiral
+    } else {
+      carTurnLeft(spiralBaseSpeed);
+    }
+    return;
+  }
+
+  // 2. Normal checking and pathfinding
+  byte result = irObstacleRead();
+  bool leftIsClear = result & 0b00000010;
+  bool rightIsClear = result & 0b00000001;
+  float distance = ultrasonicRead();
+
+  // Check for obstacles
+  if ((distance > 0 && distance < 20) || (!rightIsClear && !leftIsClear)) {
+    // Start obstacle maneuver sequence
+    spiralState = 1;
+    spiralStateTimer = currentMillis;
+    carSetMotors(-spiralBaseSpeed, -spiralBaseSpeed); 
+  } else if (!rightIsClear) {
+    carTurnLeft(spiralBaseSpeed);
+  } else if (!leftIsClear) {
+    carTurnRight(spiralBaseSpeed);
+  } else {
+    // No obstacles, move in a spiral pattern
+    carSetMotors(spiralBaseSpeed, spiralBaseSpeed - spiralTurnSpeed);
+    
+    // Increment the turn speed every 500ms
+    if (currentMillis - lastSpiralIncrementTime > 500) {
+      spiralTurnSpeed += spiralTurnIncrement;
+      if (spiralTurnSpeed > spiralMaxTurnSpeed) {
+        spiralTurnSpeed = 20;  // Reset turning speed
+      }
+      lastSpiralIncrementTime = currentMillis;
+    }
+  }
+}
+
 void obstacleFollowing() {
+  // ... (Original logic preserved)
   byte result = irObstacleRead();
   bool leftIsClear = result & 0b00000010;
   bool rightIsClear = result & 0b00000001;
   float usDistance = ultrasonicRead();
-  // usDistance = -1 while the distance is too far
   if (usDistance < 4 && usDistance > 0) {
     carStop();
   } else if (usDistance < 10 && usDistance > 0) {
@@ -297,33 +282,31 @@ void obstacleFollowing() {
   }
 }
 
-/**
- * Obstacle avoidance program
- */
-int8_t last_clear = -1;  // last_clear, 1, left; -1, right;
+int8_t last_clear = -1;  
 bool last_forward = false;
 
 void obstacleAvoidance() {
+  // ... (Original logic preserved)
   byte result = irObstacleRead();
-  bool leftIsClear = result & 0b00000010;   // left, clear: True
-  bool rightIsClear = result & 0b00000001;  // right, clear: True
+  bool leftIsClear = result & 0b00000010;   
+  bool rightIsClear = result & 0b00000001;  
   bool middleIsClear = ultrasonicIsClear();
 
-  if (middleIsClear && leftIsClear && rightIsClear) {  // 111
+  if (middleIsClear && leftIsClear && rightIsClear) {  
     last_forward = true;
     carForward(OBSTACLE_AVOID_POWER);
   } else {
-    if ((leftIsClear && rightIsClear) || (!leftIsClear && !rightIsClear)) {  // 101, 000, 010
+    if ((leftIsClear && rightIsClear) || (!leftIsClear && !rightIsClear)) {  
       if (last_clear == 1) carTurnLeft(OBSTACLE_AVOID_POWER);
       else carTurnRight(OBSTACLE_AVOID_POWER);
       last_forward = false;
-    } else if (leftIsClear) {  // 100, 110
+    } else if (leftIsClear) {  
       if (last_clear == 1 || last_forward == true) {
         carTurnLeft(OBSTACLE_AVOID_POWER);
         last_clear = 1;
         last_forward = false;
       }
-    } else if (rightIsClear) {  // 001, 011
+    } else if (rightIsClear) {  
       if (last_clear == -1 || last_forward == true) {
         carTurnRight(OBSTACLE_AVOID_POWER);
         last_clear = -1;
@@ -333,10 +316,8 @@ void obstacleAvoidance() {
   }
 }
 
-/**
- * voice control program
- */
 void voice_control() {
+  // ... (Original logic preserved)
   if (voice_time == -1) {
     voice_action(current_voice_code, VOICE_CONTROL_POWER);
   } else {
@@ -350,9 +331,7 @@ void voice_control() {
   }
 }
 
-/**
- * websocket received data processing
- */
+
 void onReceive() {
   // --------------------- send data ---------------------
   // battery voltage
@@ -387,8 +366,14 @@ void onReceive() {
     if (currentMode != MODE_OBSTACLE_FOLLOWING) {
       currentMode = MODE_OBSTACLE_FOLLOWING;
     }
-  } else {
-    if (currentMode == MODE_OBSTACLE_FOLLOWING || currentMode == MODE_OBSTACLE_AVOIDANCE) {
+  } 
+    else if (aiCam.getSwitch(REGION_G)) { // <-- ADDED THIS TRIGGER
+    if (currentMode != MODE_SPIRAL) {
+      currentMode = MODE_SPIRAL;
+      spiralState = 0; // Reset state when engaging
+    }
+    else {
+    if (currentMode == MODE_OBSTACLE_FOLLOWING || currentMode == MODE_OBSTACLE_AVOIDANCE || currentMode == MODE_SPIRAL) {
       currentMode = MODE_NONE;
       carStop();
       return;
