@@ -1,4 +1,4 @@
-# HackIllinois2026
+# SpongeRake
 
 A modified GalaxyRVR rover project built at HackIllinois 2026.
 
