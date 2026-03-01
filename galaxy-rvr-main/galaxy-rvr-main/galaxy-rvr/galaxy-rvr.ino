@@ -253,7 +253,7 @@ void spiralMovement() {
   float distance = ultrasonicRead();
 
   // Check for obstacles
-  if ((distance > 0 && distance < 20) || (!rightIsClear && !leftIsClear)) {
+  if ((distance > 0 && distance < 10) || (!rightIsClear && !leftIsClear)) {
     // Start obstacle maneuver sequence
     spiralState = 1;
     spiralStateTimer = currentMillis;
