@@ -103,16 +103,11 @@
 /** Instantiate aicamera, a class for serial communication with ESP32-CAM */
 AiCamera aiCam = AiCamera(NAME, TYPE);
 
-/* Config Rake Servo */
+/* Config Camera Servo */
 SoftServo servo;
 
 #define SERVO_PIN 6
 #define SERVO_REVERSE false
-
-/* Rake servo positions */
-#define RAKE_DOWN 15       // Rake lowered (default)
-#define RAKE_UP 120       // Rake raised for obstacle clearance
-#define RAKE_RAISE_THRESHOLD 20  // Power threshold to raise rake when moving
 
 /* variables of voice control */
 char voice_buf_temp[20];
@@ -123,12 +118,7 @@ uint32_t voice_start_time = 0; // uint:s
 /* variables of motors and servo*/
 int8_t leftMotorPower = 0;
 int8_t rightMotorPower = 0;
-uint8_t servoAngle = RAKE_DOWN;  // Start with rake down
-bool rakeRaised = false;  // Track current rake state
-
-/* runtime control flags */
-bool sliderOverride = false;  // when true, slider input controls rake directly instead of auto logic
-
+uint8_t servoAngle = 90;
 
 /* variables of rgb_blink when disconnected */
 uint32_t rgb_blink_interval = 500; // uint: ms
@@ -160,7 +150,7 @@ void setup() {
   irObstacleBegin();
   batteryBegin();
   servo.attach(SERVO_PIN);
-  servo.write(RAKE_DOWN);  // Start with rake lowered
+  servo.write(90);
 
 #if !TEST
   aiCam.begin(SSID, PASSWORD, WIFI_MODE, PORT);
@@ -241,9 +231,8 @@ void modeHandler() {
     case MODE_NONE:
       rgbWrite(MODE_NONE_COLOR);
       carStop();
-      servoAngle = RAKE_DOWN;
+      servoAngle = 90;
       servo.write(servoAngle);
-      rakeRaised = false;
       break;
     case MODE_DISCONNECT:
       if (millis() - rgb_blink_start_time > rgb_blink_interval) {
@@ -253,61 +242,34 @@ void modeHandler() {
       if (rgb_blink_flag) rgbWrite(MODE_DISCONNECT_COLOR);
       else rgbOff();
       carStop();
-      servoAngle = RAKE_DOWN;
+      servoAngle = 90;
       servo.write(servoAngle);
-      rakeRaised = false;
       break;
     case MODE_OBSTACLE_FOLLOWING:
       rgbWrite(MODE_OBSTACLE_FOLLOWING_COLOR);
+      servo.write(servoAngle);
       obstacleFollowing();
       break;
     case MODE_OBSTACLE_AVOIDANCE:
       rgbWrite(MODE_OBSTACLE_AVOIDANCE_COLOR);
+      servo.write(servoAngle);
       obstacleAvoidance();
       break;
     case MODE_APP_CONTROL:
       rgbWrite(MODE_APP_CONTROL_COLOR);
+      servo.write(servoAngle);
       carSetMotors(leftMotorPower, rightMotorPower);
-      updateRake();  // Update rake for app control mode
       break;
     case MODE_VOICE_CONTROL:
       rgbWrite(MODE_VOICE_CONTROL_COLOR);
+      servo.write(servoAngle);
       voice_control();
-      updateRake();  // Update rake for voice control mode
       break;
     default:
       break;
   }
 }
 
-
-/**
- * Update rake position based on motor power and obstacle detection
- * Raises rake when car is moving forward at sufficient power and obstacle detected
- */
-void updateRake() {
-  if (sliderOverride) return; // don't auto-adjust when user is overriding via slider
-
-  int maxPower = max(abs(leftMotorPower), abs(rightMotorPower));
-  float usDistance = ultrasonicRead();
-  byte result = irObstacleRead();
-  bool obstacleDetected = (usDistance > 0 && usDistance < FOLLOW_DISTANCE) || 
-                          ((result & 0b00000001) == 0) ||  // right obstacle
-                          ((result & 0b00000010) == 0);     // left obstacle
-  
-  // Raise rake if obstacle detected by ultrasonic sensor
-  bool shouldRaiseRake = maxPower >= RAKE_RAISE_THRESHOLD && obstacleDetected;
-  
-  if (shouldRaiseRake && !rakeRaised) {
-    servoAngle = RAKE_UP;
-    rakeRaised = true;
-  } else if (!shouldRaiseRake && rakeRaised) {
-    servoAngle = RAKE_DOWN;
-    rakeRaised = false;
-  }
-  
-  servo.write(servoAngle);
-}
 
 /**
  * Obstacle follow program
@@ -333,7 +295,6 @@ void obstacleFollowing() {
       carStop();
     }
   }
-  updateRake();  // Update rake based on current conditions
 }
 
 /**
@@ -370,7 +331,6 @@ void obstacleAvoidance() {
       }
     }
   }
-  updateRake();  // Update rake based on current conditions
 }
 
 /**
@@ -474,10 +434,8 @@ void onReceive() {
   }
 
   // servo angle
-  // check for user override switch (B) – when on the slider takes control of the rake
-  sliderOverride = aiCam.getSwitch(REGION_B);
-  if (sliderOverride) {
-    int temp = aiCam.getSlider(REGION_D);
+  int temp = aiCam.getSlider(REGION_D);
+  if (servoAngle != temp) {
     if (currentMode == MODE_NONE || currentMode == MODE_DISCONNECT) {
       currentMode = MODE_APP_CONTROL;
     }
@@ -488,10 +446,7 @@ void onReceive() {
       temp = constrain(temp, 0, 140);
     }
     servoAngle = temp;
-    servo.write(servoAngle);
   }
-  // if not overriding, rake will be updated by updateRake() from the mode handlers
-  
 
   // throttle
   int throttle_L = aiCam.getThrottle(REGION_K);
